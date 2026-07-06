@@ -1,0 +1,13 @@
+node_modules
+docs
+doc
+dist
+
+# npmrc (contains auth token, do not commit)
+.npmrc
+
+# server
+server/.env
+server/node_modules
+
+提示词.md

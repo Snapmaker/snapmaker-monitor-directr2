@@ -1,0 +1,34 @@
+﻿{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "monitor-direct-r2",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+  },
+  "r2_buckets": [
+    {
+      "binding": "MONITOR_BUCKET",
+      "bucket_name": "data-analyse",
+    },
+  ],
+  "d1_databases": [
+    {
+      "binding": "MY_BINDING_D1",
+      "database_name": "monitor-sdk-data",
+    },
+  ],
+  "vars": {
+    "LOG_LEVEL": "info",
+    "PII_HMAC_SALT": "",
+    "ALLOWED_ORIGINS": "",
+    "D1_RETENTION_DAYS": "60",
+  },
+  "triggers": {
+    "crons": [
+      "*/15 * * * *", // 对账回补：每 15 分钟（R2 → D1 自愈）
+      "17 3 * * *", // 滚动清理：每天 03:17 UTC 删超期行
+    ],
+  },
+}
