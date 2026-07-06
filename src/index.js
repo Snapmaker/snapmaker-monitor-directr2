@@ -17,7 +17,7 @@ import { generateKey, toJSONL, groupByAppId } from './r2.js';
 
 import { uuidv7 } from './uuid.js';
 import { createLogger } from './logger.js';
-
+//
 export default {
   async fetch(request, env, ctx) {
     const log = createLogger(env);
