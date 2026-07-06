@@ -21,8 +21,6 @@
   ],
   "vars": {
     "LOG_LEVEL": "info",
-    "PII_HMAC_SALT": "",
-    "ALLOWED_ORIGINS": "",
     "D1_RETENTION_DAYS": "60",
   },
   "triggers": {
@@ -32,3 +30,4 @@
     ],
   },
 }
+

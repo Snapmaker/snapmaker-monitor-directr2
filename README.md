@@ -9,7 +9,7 @@
 ┌──────────────┐    POST      ┌──────────────────────┐  JSONL    ┌────────────┐
 │ sendBeacon / │  ─────────>  │ fetch(request)       │ ────────> │            │
 │ XHR          │              │                      │           │ data-      │
-│              │  <─────────  │ 1. 验证 / 脱敏        │ 分区写入  │ analyse    │
+│              │  <─────────  │ 1. 验证 / 分组      │ 分区写入  │ analyse    │
 │ { logs: [...]}   200 OK    │ 2. 分组 / JSONL      │           │            │
 └──────────────┘              │ 3. R2.put()           │           │ app_id/    │
                               └──────────────────────┘           │   date/HH/ │
@@ -62,9 +62,6 @@ npx wrangler login
 
 # 3. 部署
 npx wrangler deploy
-
-# 4. 配置环境变量（若需修改默认值）
-npx wrangler secret put PII_HMAC_SALT
 ```
 
 ### 部署后配置
@@ -84,9 +81,20 @@ MonitorSDK.init({
 | 变量             | 必需 | 默认值 | 说明                                    |
 |-----------------|------|--------|----------------------------------------|
 | `MONITOR_BUCKET` | 是   | —      | R2 bucket binding（wrangler.jsonc 配置）|
-| `PII_HMAC_SALT`  | 否   | `""`   | HMAC salt（缺省降级为 SHA256）          |
-| `ALLOWED_ORIGINS`| 否   | `""`   | CORS 允许域名（逗号分隔；缺省允许所有） |
 | `LOG_LEVEL`      | 否   | `info` | 日志级别：debug/info/warn/error         |
+| `D1_RETENTION_DAYS` | 否 | `60` | D1 数据保留天数（超过自动清理）        |
+
+## 自动化部署
+
+本项目已预置 GitHub Actions 工作流（`.github/workflows/deploy.yml`），推送 `master` 分支即自动部署到 Cloudflare Workers。
+
+### 首次配置
+
+1. 在 [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens) 页面创建一个 **API 令牌**（权限：`Workers: Edit`）
+2. 在 GitHub 仓库 → **Settings → Secrets and variables → Actions** 添加 Secret：
+   - **Name**: `CLOUDFLARE_API_TOKEN`
+   - **Value**: （粘贴令牌值）
+3. 推送代码到 `main` 分支后，GitHub Actions 会自动执行 `npx wrangler deploy`
 
 ## 本地开发
 
@@ -116,10 +124,13 @@ DirectR2/
 │   ├── index.js       # Worker 主入口（fetch handler）
 │   ├── validation.js  # 请求体 & 事件格式验证（纯 JS，无 zod）
 │   ├── r2.js          # R2 key 生成 / JSONL 序列化 / 分组
-│   ├── crypto.js      # PII 脱敏（sha256 / hmac / IP 截断）
+│   ├── crypto.js      # PII 脱敏（当前未使用——已解除脱敏）
 │   ├── uuid.js        # UUID v7 生成
 │   └── logger.js      # 日志封装（支持 LOG_LEVEL 控制）
 ├── wrangler.jsonc     # Wrangler 配置（R2 binding + vars）
+├── .github/
+│   └── workflows/
+│       └── deploy.yml # GitHub Actions 自动部署
 └── README.md          # 本文档
 ```
 
@@ -128,4 +139,3 @@ DirectR2/
 - **同步写 R2**：await R2.put() 后才返回响应，确保 SDK 的 XHR 重试机制生效
 - **sendBeacon 兼容**：浏览器 sendBeacon 是 fire-and-forget，但 Worker 仍会完整执行 R2 写入
 - **批处理**：单次请求中的所有事件合并为少量 JSONL 文件（按 app_id 分组），避免产生过多小文件
-- **脱敏前置**：PII 脱敏（user_id HMAC / session_id SHA256）在写入 R2 前完成，R2 中不留明文

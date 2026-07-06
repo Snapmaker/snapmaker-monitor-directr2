@@ -6,17 +6,15 @@
  * ▸ 与 SDK reporter.js 输出的 { logs: [...] } 格式兼容
  * ▸ D1 写入使用 ctx.waitUntil() 异步执行，不增加响应延迟
  *
- * Workers 环境变量（wrangler.jsonc / CF Dashboard）：
+ * Workers 环境变量（wrangler.jsonc / CF Dashboard，已移除 PII 脱敏）：
  *   MONITOR_BUCKET       — R2 bucket 绑定（必需）
  *   MY_BINDING_D1        — D1 数据库绑定（Phase 1 双写用，可选）
- *   PII_HMAC_SALT        — PII 脱敏用 HMAC salt（可选，缺省则用 SHA256）
- *   ALLOWED_ORIGINS      — CORS 允许的域名（可选，逗号分隔；缺省允许所有）
- *   LOG_LEVEL            — 日志级别 debug/info/warn/error（可选，默认 info）
+   *   LOG_LEVEL            — 日志级别 debug/info/warn/error（可选，默认 info）
  */
 
 import { validateEvent, validateReportBody, extractEvents } from './validation.js';
 import { generateKey, toJSONL, groupByAppId } from './r2.js';
-import { sanitizeEvents, importHmacKey } from './crypto.js';
+
 import { uuidv7 } from './uuid.js';
 import { createLogger } from './logger.js';
 
@@ -86,7 +84,6 @@ export default {
 
     // ── 逐条验证（同步，无 await）──────────────────────────
     const clientIP = request.headers.get('cf-connecting-ip') || '';
-    const hmacSalt = env.PII_HMAC_SALT || '';
 
     const validationErrors = [];
     const validData = [];
@@ -112,9 +109,8 @@ export default {
       );
     }
 
-    // ── 批量并行 PII 脱敏 ──────────────────────────────────
-    const hmacKey = hmacSalt ? await importHmacKey(hmacSalt) : null;
-    const validEvents = await sanitizeEvents(validData, clientIP, hmacKey);
+    // ── 直接使用原始数据，不进行任何 PII 脱敏 ────────────
+    const validEvents = validData.map(ev => ({ ...ev, _client_ip: clientIP }));
 
     // ── 按 app_id 分组 ──────────────────────────────────────
     const groups = groupByAppId(validEvents);
@@ -339,16 +335,16 @@ function mapEventToRow(ev, r2Key, offset, receivedAt) {
     Number(ev.timestamp) || 0, // ts（强制数值，避免字符串时间戳导致范围比较错乱）
     receivedAt, // received_at
     ev.app_id || '', // app_id
-    ev.user_id || '', // user_id（已哈希）
-    ev.device_id || '', // device_id（已哈希，HMAC）
-    ev.session_id || '', // session_id（已哈希）
+    ev.user_id || '', // user_id（原始值，未脱敏）
+    ev.device_id || '', // device_id（原始值，未脱敏）
+    ev.session_id || '', // session_id（原始值，未脱敏）
     ev.page_url || '', // page_url
     ev.page_title || '', // page_title
     ev.referrer || '', // referrer
     ev.sdk_version || '', // sdk_version
     ev.client_type || 'Web', // client_type
     ev.fingerprint_id || '', // fingerprint_id
-    ev._client_ip || '', // client_ip（已截断）
+    ev._client_ip || '', // client_ip（原始值）
     truncatedExtra, // extra（超 2000 字符截断）
     extraStr.length, // raw_extra
   ];
@@ -624,3 +620,5 @@ function jsonResponse(status, data) {
     headers: { 'content-type': 'application/json' },
   });
 }
+
+
